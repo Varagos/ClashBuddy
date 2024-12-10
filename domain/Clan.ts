@@ -1,6 +1,6 @@
 import { ClanWarLogEntry } from "../services/clash-client/types.ts";
 
-type ClanMemberWarActivity = "out" | "zero" | "one" | "two" | "unknown";
+export type ClanMemberWarActivity = "out" | "zero" | "one" | "two" | "unknown";
 
 export class ClanWar {
   constructor(

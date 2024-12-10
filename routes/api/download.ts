@@ -1,8 +1,10 @@
-import { FreshContext } from "$fresh/server.ts";
+import { FreshContext, RouteConfig } from "$fresh/server.ts";
 // @deno-types="https://cdn.sheetjs.com/xlsx-0.20.3/package/types/index.d.ts"
 import * as XLSX from "https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs";
 import { ClashClient } from "../../services/clash-client/ClashClient.ts";
 import { Clan } from "../../domain/Clan.ts";
+import { downloadHandler } from "../../application-handlers/download/download.handler.ts";
+import { ContentType } from "../../_helpers.ts";
 
 /**
  * Function to create an Excel file from a list of clan members
@@ -19,60 +21,66 @@ function createExcelFile(worksheetData: string[][]): Uint8Array {
   return new Uint8Array(fileContent);
 }
 
-export const handler = async (req: Request, _ctx: FreshContext) => {
-  try {
-    // Extract API key and clan tag from request (support both GET query and POST body)
-    let apiKey = "";
-    let clanTag = "";
+class DownloadController {
+  public async handler(req: Request, _ctx: FreshContext) {
+    try {
+      // Extract API key and clan tag from request (support both GET query and POST body)
+      let apiKey = "";
+      let clanTag = "";
 
-    console.log(`Request method: ${req.method}`);
+      console.log(`Request method: ${req.method}`);
 
-    if (req.method === "GET") {
-      const url = new URL(req.url);
-      apiKey = url.searchParams.get("key") || "";
-      clanTag = url.searchParams.get("tag") || "";
-    } else if (req.method === "POST") {
-      const body = await req.json();
-      apiKey = body.key || "";
-      clanTag = body.tag || "";
+      const responseContentType = req.headers.get("Content-Type");
+      if (req.method === "GET") {
+        const url = new URL(req.url);
+        apiKey = url.searchParams.get("key") || "";
+        clanTag = url.searchParams.get("tag") || "";
+      } else if (req.method === "POST") {
+        const body = await req.json();
+        apiKey = body.key || "";
+        clanTag = body.tag || "";
+      }
+
+      // Validate required fields
+      if (!apiKey || !clanTag) {
+        return new Response("Missing API key or Clan tag", { status: 400 });
+      }
+      console.log("before downloadHandler.handle");
+      const result = await downloadHandler.handle({ apiKey, clanTag });
+
+      if (responseContentType === ContentType.JSON) {
+        console.log("Returning JSON response");
+        return new Response(JSON.stringify(result), {
+          status: 200,
+          headers: { "Content-Type": ContentType.JSON },
+        });
+      }
+
+      if (
+        responseContentType ===
+          ContentType.EXCEL
+        // "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      ) {
+        console.log("Creating Excel file...");
+        const worksheetData = result.members.map((name) => [name]);
+        const blob = createExcelFile(worksheetData);
+        console.log("Excel file has been created successfully.");
+        return new Response(blob, {
+          status: 200,
+          headers: {
+            "Content-Type": ContentType.EXCEL,
+            "Content-Disposition": 'attachment; filename="clan_members.xlsx"',
+          },
+        });
+      }
+
+      console.log("Invalid content type");
+      return new Response("Invalid content type", { status: 400 });
+    } catch (error: any) {
+      console.error("Server-side error:", error);
+      return new Response(`Error: ${error.message}`, { status: 500 });
     }
-
-    // Validate required fields
-    if (!apiKey || !clanTag) {
-      return new Response("Missing API key or Clan tag", { status: 400 });
-    }
-
-    const clashClient = new ClashClient(apiKey);
-
-    console.log("Fetching clan members...");
-    const members = await clashClient.getClanMembers(clanTag);
-    console.log(`Fetched ${members.length} members.`);
-
-    const warLogResponse = await clashClient.fetchClanWarLogLast(5, clanTag);
-
-    console.log(`Fetched last wars: ${warLogResponse.length}`);
-
-    const worksheetData = members.map((name) => [name]);
-    const blob = createExcelFile(worksheetData);
-    console.log("Excel file has been created successfully.");
-    const clan = new Clan(members);
-    clan.syncLastWars(warLogResponse);
-    const lastWars = clan.getLastWars();
-    const memberWarActivity = clan.getMemberWarActivity();
-
-    const currentWar = await clashClient.getCurrentWar(clanTag);
-    console.log(currentWar);
-
-    return new Response(blob, {
-      status: 200,
-      headers: {
-        "Content-Type":
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": 'attachment; filename="clan_members.xlsx"',
-      },
-    });
-  } catch (error: any) {
-    console.error("Server-side error:", error);
-    return new Response(`Error: ${error.message}`, { status: 500 });
   }
-};
+}
+
+export const handler = new DownloadController().handler;

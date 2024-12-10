@@ -1,17 +1,28 @@
+import { useSignal } from "@preact/signals";
+import { Input } from "../components/Input.tsx";
+import { Button } from "../components/Button.tsx";
 import DownloadButton from "../islands/DownloadButton.tsx";
+import ClanTagInput from "../islands/ClanTagInput.tsx";
 
 const API_KEY = Deno.env.get("COC_API_KEY");
 if (!API_KEY) {
   throw new Error("Missing Clash of Clans API key");
 }
 
-const CLAN_TAG = "#2G99PVOLG";
+const DEFAULT_CLAN_TAG = "#2G99PVOLG";
 
 export default function Home() {
   console.log("Hello from the Home route!");
 
+  // Signal to store the Clan Tag (pre-populated with default)
+  const clanTag = useSignal(DEFAULT_CLAN_TAG);
+
+  const handleSaveClanTag = () => {
+    console.log("Clan Tag saved:", clanTag.value);
+  };
+
   return (
-    <div class="px-4 py-8 mx-auto bg-[#86efac] ">
+    <div class="px-4 py-8 mx-auto bg-[#86efac]">
       <div class="max-w-screen-md mx-auto flex flex-col items-center justify-center">
         <img
           class="my-6"
@@ -27,8 +38,13 @@ export default function Home() {
           click.
         </p>
 
+        {/* Clan Tag Input */}
+        <ClanTagInput
+          onTagChange={(newTag) => console.log("Updated Clan Tag:", newTag)}
+        />
+
         {/* Download Button */}
-        <DownloadButton apiKey={API_KEY!} clanTag={CLAN_TAG} />
+        <DownloadButton apiKey={API_KEY!} />
       </div>
     </div>
   );
